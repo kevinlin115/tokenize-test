@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, OnInit } from '@angular/core';
+import { AfterViewInit, Component, HostListener, OnInit } from '@angular/core';
 import { createChart } from 'lightweight-charts';
 import { DateTime } from 'luxon';
 import { from, tap } from 'rxjs';
@@ -13,11 +13,19 @@ const api = require('@marcius-capital/binance-api')
 })
 export class AppComponent implements OnInit, AfterViewInit {
 
+  readonly ChartWidth = 400;
+
+  @HostListener('window:resize')
+  onWindowResize() {
+    this.chart?.resize(this.chartContainer?.clientWidth || 300, this.ChartWidth);
+  }
+
   get Currencies() { return Object.keys(CurrencyMap) as Currency[]; }
   get CurrencyMap() { return CurrencyMap; }
   get ChartContainerID() { return 'ChartContainerID' }
 
   currentSymbol = Symbol.BTCUSDT;
+  chartContainer: HTMLElement | undefined;
   chart: IChartApi | undefined;
   candlestickSeries: ISeriesApi<'Candlestick'> | undefined;
 
@@ -25,11 +33,10 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
-    this.chart = createChart(document.getElementById(this.ChartContainerID) || document.body, { width: 400, height: 300 });
+    this.chartContainer = document.getElementById(this.ChartContainerID) || document.body;
+    this.chart = createChart(this.chartContainer, { width: this.chartContainer.clientWidth, height: this.ChartWidth });
     this.candlestickSeries = this.chart.addCandlestickSeries();
     this.getKlines(this.currentSymbol).subscribe();
-export class AppComponent {
-  title = 'tokenize-test';
   }
 
   onCurrencyChanged(currency: Currency) {
@@ -41,6 +48,7 @@ export class AppComponent {
   private getKlines(symbol: Symbol) {
     return from(api.rest.klines({ symbol, interval: '1d', limit: 500 })).pipe(
       tap((res) => {
+        console.log(`get klines = `, res);
         const klines: Kline[] = res as Kline[];
         const data = klines.map(kline => {
           return {
