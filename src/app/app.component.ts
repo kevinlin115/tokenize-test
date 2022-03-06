@@ -1,5 +1,5 @@
 import { AfterViewInit, Component, HostListener, OnInit } from '@angular/core';
-import { createChart } from 'lightweight-charts';
+import { CandlestickData, createChart } from 'lightweight-charts';
 import { DateTime } from 'luxon';
 import { from, tap } from 'rxjs';
 import { IChartApi, ISeriesApi } from './../../node_modules/lightweight-charts/dist/typings.d';
@@ -28,6 +28,11 @@ export class AppComponent implements OnInit, AfterViewInit {
   chartContainer: HTMLElement | undefined;
   chart: IChartApi | undefined;
   candlestickSeries: ISeriesApi<'Candlestick'> | undefined;
+  private data: { [key in Symbol]: CandlestickData[] } = {
+    [Symbol.BTCUSDT]: [],
+    [Symbol.ETHUSDT]: [],
+    [Symbol.SHIBUSDT]: [],
+  };
 
   ngOnInit(): void {
   }
@@ -36,32 +41,36 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.chartContainer = document.getElementById(this.ChartContainerID) || document.body;
     this.chart = createChart(this.chartContainer, { width: this.chartContainer.clientWidth, height: this.ChartWidth });
     this.candlestickSeries = this.chart.addCandlestickSeries();
-    this.getKlines(this.currentSymbol).subscribe();
+    this.getKlines(this.currentSymbol);
   }
 
   onCurrencyChanged(currency: Currency) {
     console.log(`onCurrencyChanged `, currency);
     this.currentSymbol = CurrencyMap[currency];
-    this.getKlines(this.currentSymbol).subscribe();
+    this.getKlines(this.currentSymbol);
   }
 
   private getKlines(symbol: Symbol) {
-    return from(api.rest.klines({ symbol, interval: '1d', limit: 500 })).pipe(
-      tap((res) => {
-        console.log(`get klines = `, res);
-        const klines: Kline[] = res as Kline[];
-        const data = klines.map(kline => {
-          return {
-            time: DateTime.fromMillis(kline.openTime).toFormat('yyyy-MM-dd'),
-            open: Number(kline.open),
-            high: Number(kline.high),
-            low: Number(kline.low),
-            close: Number(kline.close),
-          };
-        });
-        this.candlestickSeries?.setData(data);
-      })
-    )
+    if (this.data[symbol].length > 0) {
+      this.candlestickSeries?.setData(this.data[symbol]);
+    } else {
+      from(api.rest.klines({ symbol, interval: '1d', limit: 1000 })).pipe(
+        tap((res) => {
+          console.log(`get klines = `, res);
+          const klines: Kline[] = res as Kline[];
+          const data = klines.map(kline => {
+            return {
+              time: DateTime.fromMillis(kline.openTime).toFormat('yyyy-MM-dd'),
+              open: Number(kline.open),
+              high: Number(kline.high),
+              low: Number(kline.low),
+              close: Number(kline.close),
+            };
+          });
+          this.candlestickSeries?.setData(data);
+        })
+      ).subscribe();
+    }
   }
 
 }
