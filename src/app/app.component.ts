@@ -1,7 +1,7 @@
-import { AfterViewInit, Component, HostListener, OnInit } from '@angular/core';
-import { CandlestickData, createChart } from 'lightweight-charts';
+import { AfterViewInit, Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { CandlestickData, createChart, Range, Time } from 'lightweight-charts';
 import { DateTime } from 'luxon';
-import { from, tap } from 'rxjs';
+import { debounceTime, from, Subject, Subscription, tap } from 'rxjs';
 import { IChartApi, ISeriesApi } from './../../node_modules/lightweight-charts/dist/typings.d';
 import { Kline } from './class/kline.class';
 const api = require('@marcius-capital/binance-api')
@@ -11,7 +11,7 @@ const api = require('@marcius-capital/binance-api')
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
 })
-export class AppComponent implements OnInit, AfterViewInit {
+export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
 
   readonly ChartWidth = 400;
 
@@ -25,14 +25,25 @@ export class AppComponent implements OnInit, AfterViewInit {
   get ChartContainerID() { return 'ChartContainerID' }
 
   currentSymbol = Symbol.BTCUSDT;
-  chartContainer: HTMLElement | undefined;
-  chart: IChartApi | undefined;
-  candlestickSeries: ISeriesApi<'Candlestick'> | undefined;
+  private chartContainer: HTMLElement | undefined;
+  private chart: IChartApi | undefined;
+  private candlestickSeries: ISeriesApi<'Candlestick'> | undefined;
   private data: { [key in Symbol]: CandlestickData[] } = {
     [Symbol.BTCUSDT]: [],
     [Symbol.ETHUSDT]: [],
     [Symbol.SHIBUSDT]: [],
   };
+
+  rangeChangeSubject = new Subject<Range<Time>>();
+  private rangeSubscription: Subscription;
+
+  constructor() {
+    this.rangeSubscription = this.rangeChangeSubject.pipe(
+      debounceTime(300)
+    ).subscribe(range => {
+      this.onRangeChange(range);
+    })
+  }
 
   ngOnInit(): void {
   }
@@ -42,6 +53,15 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.chart = createChart(this.chartContainer, { width: this.chartContainer.clientWidth, height: this.ChartWidth });
     this.candlestickSeries = this.chart.addCandlestickSeries();
     this.getKlines(this.currentSymbol);
+    this.chart.timeScale().subscribeVisibleTimeRangeChange((range) => {
+      if (range) {
+        this.rangeChangeSubject.next(range);
+      }
+    })
+  }
+
+  ngOnDestroy(): void {
+    this.rangeSubscription.unsubscribe();
   }
 
   onCurrencyChanged(currency: Currency) {
@@ -71,6 +91,10 @@ export class AppComponent implements OnInit, AfterViewInit {
         })
       ).subscribe();
     }
+  }
+
+  private onRangeChange(range: Range<Time>) {
+    console.log(`on range change `, range);
   }
 
 }
